@@ -1,4 +1,4 @@
-(function() {
+(function () {
     var Ext = window.Ext4 || window.Ext;
 
     Ext.define('Rally.apps.board.BoardApp', {
@@ -35,6 +35,14 @@
                 defaultMargins: '0 10 10 0',
             }
         }, {
+            id: Utils.AncestorPiAppFilter.PANEL_RENDER_AREA_ID,
+            xtype: 'container',
+            layout: {
+                type: 'hbox',
+                align: 'middle',
+                defaultMargins: '0 10 10 0',
+            }
+        }, {
             id: 'grid-area',
             xtype: 'container',
             flex: 1,
@@ -49,31 +57,34 @@
             }
         },
 
-        launch: function() {
+        launch: function () {
+            Rally.data.wsapi.Proxy.superclass.timeout = 240000;
+            Rally.data.wsapi.batch.Proxy.superclass.timeout = 240000;
+            var context = this.getContext();
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
                 ptype: 'UtilsAncestorPiAppFilter',
                 pluginId: 'ancestorFilterPlugin',
-                settingsConfig: {
-                    //labelWidth: 150,
-                    //margin: 10
-                },
+                settingsConfig: {},
+                filtersHidden: false,
+                defaultFilterFields: ['ArtifactSearch', 'Owner'],
+                blackListFields: ['Successors', 'Predecessors', 'DisplayColor'],
+                whiteListFields: ['Milestones', 'Tags'],
                 listeners: {
                     scope: this,
-                    ready: function(plugin) {
+                    ready: function (plugin) {
                         Rally.data.util.PortfolioItemHelper.getPortfolioItemTypes().then({
                             scope: this,
-                            success: function(portfolioItemTypes) {
+                            success: function (portfolioItemTypes) {
                                 this.portfolioItemTypes = portfolioItemTypes;
                                 Rally.data.ModelFactory.getModel({
                                     type: this.getSetting('type'),
                                     context: this.getContext().getDataContext()
                                 }).then({
-                                    success: function(model) {
+                                    success: function (model) {
                                         plugin.addListener({
                                             scope: this,
-                                            select: function() {
-                                                this._addBoard();
-                                            }
+                                            select: this._addBoard,
+                                            change: this._addBoard
                                         });
                                         this.model = model;
                                         this._addBoard();
@@ -89,7 +100,7 @@
         },
 
         // Usual monkey business to size gridboards
-        onResize: function() {
+        onResize: function () {
             this.callParent(arguments);
             var gridArea = this.down('#grid-area');
             var gridboard = this.down('rallygridboard');
@@ -98,7 +109,7 @@
             }
         },
 
-        _getGridBoardConfig: function() {
+        _getGridBoardConfig: function () {
             var context = this.getContext();
             var dataContext = context.getDataContext();
             if (this.searchAllProjects()) {
@@ -115,50 +126,48 @@
                     height: gridArea.getHeight(),
                     cardBoardConfig: this._getBoardConfig(),
                     plugins: [{
-                            ptype: 'rallygridboardaddnew',
-                            addNewControlConfig: {
-                                stateful: true,
-                                stateId: context.getScopedStateId('board-add-new')
-                            }
-                        },
-                        {
-                            ptype: 'rallygridboardinlinefiltercontrol',
-                            inlineFilterButtonConfig: {
-                                stateful: true,
-                                stateId: context.getScopedStateId('board-inline-filter'),
-                                modelNames: modelNames,
-                                legacyStateIds: [
-                                    context.getScopedStateId('board-owner-filter'),
-                                    context.getScopedStateId('board-custom-filter-button')
-                                ],
-                                filterChildren: true,
-                                inlineFilterPanelConfig: {
-                                    quickFilterPanelConfig: {
-                                        portfolioItemTypes: this.portfolioItemTypes,
-                                        modelName: modelNames[0],
-                                        defaultFields: ['ArtifactSearch', 'Owner'],
-                                        addQuickFilterConfig: {
+                        ptype: 'rallygridboardaddnew',
+                        addNewControlConfig: {
+                            stateful: true,
+                            stateId: context.getScopedStateId('board-add-new')
+                        }
+                    },
+                    {
+                        ptype: 'rallygridboardinlinefiltercontrol',
+                        inlineFilterButtonConfig: {
+                            stateful: false,
+                            modelNames: modelNames,
+                            filterChildren: true,
+                            hidden: true,
+                            inlineFilterPanelConfig: {
+                                hidden: true,
+                                quickFilterPanelConfig: {
+                                    portfolioItemTypes: this.portfolioItemTypes,
+                                    modelName: modelNames[0],
+                                    defaultFields: ['ArtifactSearch', 'Owner'],
+                                    addQuickFilterConfig: {
+                                        blackListFields: blackListFields,
+                                        whiteListFields: whiteListFields
+                                    }
+                                },
+                                advancedFilterPanelConfig: {
+                                    advancedFilterRowsConfig: {
+                                        propertyFieldConfig: {
                                             blackListFields: blackListFields,
                                             whiteListFields: whiteListFields
-                                        }
-                                    },
-                                    advancedFilterPanelConfig: {
-                                        advancedFilterRowsConfig: {
-                                            propertyFieldConfig: {
-                                                blackListFields: blackListFields,
-                                                whiteListFields: whiteListFields
-                                            }
                                         }
                                     }
                                 }
                             }
-                        },
-                        {
-                            ptype: 'rallygridboardfieldpicker',
-                            headerPosition: 'left',
-                            boardFieldBlackList: blackListFields,
-                            modelNames: modelNames
                         }
+                    },
+                    {
+                        ptype: 'rallygridboardfieldpicker',
+                        headerPosition: 'left',
+                        boardFieldBlackList: blackListFields,
+                        modelNames: modelNames,
+                        margin: '3 10 0 10'
+                    }
                     ],
                     context: context,
                     modelNames: modelNames,
@@ -177,7 +186,7 @@
             return config;
         },
 
-        _onLoad: function() {
+        _onLoad: function () {
             this.recordComponentReady({
                 miscData: {
                     type: this.getSetting('type'),
@@ -187,7 +196,7 @@
             });
         },
 
-        _getBoardConfig: function() {
+        _getBoardConfig: function () {
             var boardConfig = {
                 margin: '10px 0 0 0',
                 attribute: this.getSetting('groupByField'),
@@ -225,31 +234,31 @@
             return boardConfig;
         },
 
-        getSettingsFields: function() {
+        getSettingsFields: function () {
             var config = {
                 context: this.getContext(),
             }
             return Rally.apps.board.Settings.getFields(config);
         },
 
-        _shouldDisableRanking: function() {
+        _shouldDisableRanking: function () {
             return this.getSetting('type').toLowerCase() === 'task' &&
                 (!this.getSetting('showRows') || this.getSetting('showRows') &&
                     this.getSetting('rowsField').toLowerCase() !== 'workproduct');
         },
 
-        _addBoard: function() {
-            var gridArea = this.down('#grid-area')
+        _addBoard: function () {
+            var gridArea = this.down('#grid-area');
             gridArea.removeAll();
             gridArea.add(this._getGridBoardConfig());
         },
 
-        onTimeboxScopeChange: function(timeboxScope) {
+        onTimeboxScopeChange: function (timeboxScope) {
             this.callParent(arguments);
             this._addBoard();
         },
 
-        _getFilters: function() {
+        _getFilters: function () {
             var queries = [],
                 timeboxScope = this.getContext().getTimeboxScope();
             if (this.getSetting('query')) {
@@ -258,15 +267,12 @@
             if (timeboxScope && timeboxScope.isApplicable(this.model)) {
                 queries.push(timeboxScope.getQueryFilter());
             }
-            var ancestorFilter = this.ancestorFilterPlugin.getFilterForType(this.model.typePath);
-            if (ancestorFilter) {
-                queries.push(ancestorFilter);
-            }
+            queries = queries.concat(this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath));
 
             return queries;
         },
 
-        searchAllProjects: function() {
+        searchAllProjects: function () {
             return this.ancestorFilterPlugin.getIgnoreProjectScope();
         },
     });

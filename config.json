@@ -3,10 +3,14 @@
     "server": "https://rally1.rallydev.com",
     "sdk": "2.1",
     "javascript": [
-        "node_modules/@agile-central-technical-services/utils-ancestor-pi-app-filter/index.js",
+        "./node_modules/@customagile/ancestor-pi-multi-level-pi-app-filter/index.js",
         "node_modules/@agile-central-technical-services/utils-ancestor-pi-inline-filter/index.js",
         "src/javascript/RowSettingsField.js",
         "src/javascript/Settings.js",
         "src/javascript/BoardApp.js"
+    ],
+    "css": [
+        "src/style/BoardApp.css",
+        "./node_modules/@customagile/ancestor-pi-multi-level-pi-app-filter/index.css"
     ]
 }
