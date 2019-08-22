@@ -21,7 +21,7 @@
 
         helpId: 287,
         cls: 'customboard',
-        autoScroll: false,
+        autoScroll: true,
         layout: {
             type: 'vbox',
             align: 'stretch'
