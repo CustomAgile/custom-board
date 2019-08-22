@@ -60,7 +60,7 @@
         launch: function () {
             Rally.data.wsapi.Proxy.superclass.timeout = 240000;
             Rally.data.wsapi.batch.Proxy.superclass.timeout = 240000;
-            var context = this.getContext();
+            var dataContext = this.getContext().getDataContext();
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
                 ptype: 'UtilsAncestorPiAppFilter',
                 pluginId: 'ancestorFilterPlugin',
@@ -72,26 +72,21 @@
                 listeners: {
                     scope: this,
                     ready: function (plugin) {
-                        Rally.data.util.PortfolioItemHelper.getPortfolioItemTypes().then({
-                            scope: this,
-                            success: function (portfolioItemTypes) {
-                                this.portfolioItemTypes = portfolioItemTypes;
-                                Rally.data.ModelFactory.getModel({
-                                    type: this.getSetting('type'),
-                                    context: this.getContext().getDataContext()
-                                }).then({
-                                    success: function (model) {
-                                        plugin.addListener({
-                                            scope: this,
-                                            select: this._addBoard,
-                                            change: this._addBoard
-                                        });
-                                        this.model = model;
-                                        this._addBoard();
-                                    },
-                                    scope: this
+                        this.portfolioItemTypes = plugin.getPortfolioItemTypes();
+                        Rally.data.ModelFactory.getModel({
+                            type: this.getSetting('type'),
+                            context: dataContext
+                        }).then({
+                            success: function (model) {
+                                plugin.addListener({
+                                    scope: this,
+                                    select: this._addBoard,
+                                    change: this._addBoard
                                 });
-                            }
+                                this.model = model;
+                                this._addBoard();
+                            },
+                            scope: this
                         });
                     },
                 }
@@ -109,13 +104,15 @@
             }
         },
 
-        _getGridBoardConfig: function () {
+        _getGridBoardConfig: async function () {
             var context = this.getContext();
             var dataContext = context.getDataContext();
             if (this.searchAllProjects()) {
                 dataContext.project = null;
             }
             var gridArea = this.down('#grid-area');
+            gridArea.setLoading(true);
+            var filters = await this._getFilters();
             var modelNames = [this.getSetting('type')],
                 blackListFields = ['Successors', 'Predecessors', 'DisplayColor'],
                 whiteListFields = ['Milestones', 'Tags'],
@@ -125,6 +122,7 @@
                     toggleState: 'board',
                     height: gridArea.getHeight(),
                     cardBoardConfig: this._getBoardConfig(),
+                    autoScroll: true,
                     plugins: [{
                         ptype: 'rallygridboardaddnew',
                         addNewControlConfig: {
@@ -172,7 +170,7 @@
                     context: context,
                     modelNames: modelNames,
                     storeConfig: {
-                        filters: this._getFilters(),
+                        filters: filters,
                         context: dataContext
                     },
                     listeners: {
@@ -187,6 +185,7 @@
         },
 
         _onLoad: function () {
+            this.down('#grid-area').setLoading(false);
             this.recordComponentReady({
                 miscData: {
                     type: this.getSetting('type'),
@@ -247,10 +246,11 @@
                     this.getSetting('rowsField').toLowerCase() !== 'workproduct');
         },
 
-        _addBoard: function () {
+        _addBoard: async function () {
             var gridArea = this.down('#grid-area');
             gridArea.removeAll();
-            gridArea.add(this._getGridBoardConfig());
+            let config = await this._getGridBoardConfig();
+            gridArea.add(config);
         },
 
         onTimeboxScopeChange: function (timeboxScope) {
@@ -258,7 +258,7 @@
             this._addBoard();
         },
 
-        _getFilters: function () {
+        _getFilters: async function () {
             var queries = [],
                 timeboxScope = this.getContext().getTimeboxScope();
             if (this.getSetting('query')) {
@@ -267,8 +267,8 @@
             if (timeboxScope && timeboxScope.isApplicable(this.model)) {
                 queries.push(timeboxScope.getQueryFilter());
             }
-            queries = queries.concat(this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath));
-
+            let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath);
+            queries = queries.concat(filters);
             return queries;
         },
 
