@@ -267,7 +267,7 @@
             if (timeboxScope && timeboxScope.isApplicable(this.model)) {
                 queries.push(timeboxScope.getQueryFilter());
             }
-            let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath);
+            let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath, true);
             queries = queries.concat(filters);
             return queries;
         },
