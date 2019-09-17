@@ -105,6 +105,7 @@
         },
 
         _getGridBoardConfig: async function () {
+            this.loadingFailed = false;
             var context = this.getContext();
             var dataContext = context.getDataContext();
             if (this.searchAllProjects()) {
@@ -112,7 +113,12 @@
             }
             var gridArea = this.down('#grid-area');
             gridArea.setLoading(true);
+
             var filters = await this._getFilters();
+            if (this.loadingFailed) {
+                gridArea.setLoading(false);
+                return {};
+            }
             var modelNames = [this.getSetting('type')],
                 blackListFields = ['Successors', 'Predecessors', 'DisplayColor'],
                 whiteListFields = ['Milestones', 'Tags'],
@@ -171,7 +177,8 @@
                     modelNames: modelNames,
                     storeConfig: {
                         filters: filters,
-                        context: dataContext
+                        context: dataContext,
+                        enablePostGet: true
                     },
                     listeners: {
                         load: this._onLoad,
@@ -250,6 +257,9 @@
             var gridArea = this.down('#grid-area');
             gridArea.removeAll();
             let config = await this._getGridBoardConfig();
+            if (this.loadingFailed) {
+                return;
+            }
             gridArea.add(config);
         },
 
@@ -267,8 +277,14 @@
             if (timeboxScope && timeboxScope.isApplicable(this.model)) {
                 queries.push(timeboxScope.getQueryFilter());
             }
-            let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath, true);
-            queries = queries.concat(filters);
+            let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath, true).catch((e) => {
+                Rally.ui.notify.Notifier.showError({ message: (e.message || e) });
+                this.loadingFailed = true;
+            });
+
+            if (filters) {
+                queries = queries.concat(filters);
+            }
             return queries;
         },
 
