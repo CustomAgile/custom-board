@@ -68,7 +68,7 @@
                 filtersHidden: false,
                 defaultFilterFields: ['ArtifactSearch', 'Owner'],
                 blackListFields: ['Successors', 'Predecessors', 'DisplayColor'],
-                whiteListFields: ['Milestones', 'Tags'],
+                whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA'],
                 listeners: {
                     scope: this,
                     ready: function (plugin) {
