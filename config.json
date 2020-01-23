@@ -7,6 +7,7 @@
         "node_modules/@agile-central-technical-services/utils-ancestor-pi-inline-filter/index.js",
         "src/javascript/RowSettingsField.js",
         "src/javascript/Settings.js",
+        "src/javascript/Overrides.js",
         "src/javascript/BoardApp.js"
     ],
     "css": [

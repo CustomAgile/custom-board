@@ -60,12 +60,14 @@
         launch: function () {
             Rally.data.wsapi.Proxy.superclass.timeout = 240000;
             Rally.data.wsapi.batch.Proxy.superclass.timeout = 240000;
-            var dataContext = this.getContext().getDataContext();
+            let dataContext = this.getContext().getDataContext();
+            let type = this.getSetting('type');
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
                 ptype: 'UtilsAncestorPiAppFilter',
                 pluginId: 'ancestorFilterPlugin',
                 settingsConfig: {},
                 filtersHidden: false,
+                visibleTab: type,
                 defaultFilterFields: ['ArtifactSearch', 'Owner'],
                 blackListFields: ['Successors', 'Predecessors', 'DisplayColor'],
                 whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA'],
@@ -104,8 +106,7 @@
             }
         },
 
-        _getGridBoardConfig: async function () {
-            this.loadingFailed = false;
+        _getGridBoardConfig: async function (status) {
             var context = this.getContext();
             var dataContext = context.getDataContext();
             if (this.searchAllProjects()) {
@@ -114,8 +115,8 @@
             var gridArea = this.down('#grid-area');
             gridArea.setLoading(true);
 
-            var filters = await this._getFilters();
-            if (this.loadingFailed) {
+            var filters = await this._getFilters(status);
+            if (status.loadingFailed) {
                 gridArea.setLoading(false);
                 return {};
             }
@@ -240,6 +241,81 @@
             return boardConfig;
         },
 
+        _getCurrentProjectHierarchyForBoardColumns: function () {
+            findNode = function (tree, projectID) {
+                let returnVal;
+                if (Array.isArray(tree)) {
+                    for (let node of tree) {
+                        if (node.oid === projectID) {
+                            return node;
+                        }
+                        if (node.children) {
+                            returnVal = findNode(node.children, projectID);
+                            if (returnVal) {
+                                return returnVal;
+                            }
+                        }
+                    }
+                }
+                else {
+                    if (tree && tree.oid === projectID) {
+                        return tree;
+                    }
+
+                    if (tree.children) {
+                        returnVal = findNode(tree.children, projectID);
+                        if (returnVal) {
+                            return returnVal;
+                        }
+                    }
+                }
+                return returnVal;
+            }
+
+            flattenNodes = function (node) {
+                let returnVal = [{
+                    value: `/project/${node.oid}`,
+                    columnHeaderConfig: {
+                        headerTpl: node.name || 'None'
+                    }
+                }];
+
+                if (node.children) {
+                    for (let child of node.children) {
+                        returnVal = returnVal.concat(flattenNodes(child));
+                    }
+                }
+
+                return returnVal;
+            }
+
+            let deferred = Ext.create('Deft.Deferred');
+            let context = this.getContext();
+            let workspaceID = context.getWorkspace().ObjectID;
+            let projectID = context.getProject().ObjectID;
+
+            Ext.Ajax.request({
+                url: `/slm/pjt/tree.sp?workspaceOid=${workspaceID}`,
+                success(response) {
+                    if (response && response.responseText) {
+                        let obj = Ext.JSON.decode(response.responseText);
+                        let node = findNode(obj, projectID);
+                        if (node) {
+                            let projects = flattenNodes(node);
+                            deferred.resolve(projects);
+                        }
+                        else {
+                            deferred.resolve([]);
+                        }
+                    } else {
+                        deferred.resolve([]);
+                    }
+                }
+            });
+
+            return deferred.promise;
+        },
+
         getSettingsFields: function () {
             var config = {
                 context: this.getContext(),
@@ -254,13 +330,23 @@
         },
 
         _addBoard: async function () {
+            let thisStatus = { loadingFailed: false, cancelLoad: false };
+            this._cancelPreviousLoad(thisStatus);
+
             var gridArea = this.down('#grid-area');
             gridArea.removeAll();
-            let config = await this._getGridBoardConfig();
-            if (this.loadingFailed) {
+            let config = await this._getGridBoardConfig(thisStatus);
+            if (thisStatus.loadingFailed || thisStatus.cancelLoad) {
                 return;
             }
             gridArea.add(config);
+        },
+
+        _cancelPreviousLoad: function (newStatus) {
+            if (this.globalStatus) {
+                this.globalStatus.cancelLoad = true;
+            }
+            this.globalStatus = newStatus;
         },
 
         onTimeboxScopeChange: function (timeboxScope) {
@@ -268,7 +354,7 @@
             this._addBoard();
         },
 
-        _getFilters: async function () {
+        _getFilters: async function (status) {
             var queries = [],
                 timeboxScope = this.getContext().getTimeboxScope();
             if (this.getSetting('query')) {
@@ -279,7 +365,7 @@
             }
             let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath, true).catch((e) => {
                 Rally.ui.notify.Notifier.showError({ message: (e.message || e) });
-                this.loadingFailed = true;
+                status.loadingFailed = true;
             });
 
             if (filters) {

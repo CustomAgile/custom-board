@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>custom-board-1.3.8</title>
+    <title>custom-board-1.3.9</title>
     <!--  (c) 2019 Custom Agile.  All Rights Reserved. -->
-    <!--  Build Date: Wed Jan 08 2020 10:56:27 GMT-0500 (Eastern Standard Time) -->
+    <!--  Build Date: Thu Jan 23 2020 20:20:50 GMT+0100 (Central European Standard Time) -->
 
     <script type="text/javascript">
-        var APP_BUILD_DATE = "Wed Jan 08 2020 10:56:27 GMT-0500 (Eastern Standard Time)";
-        var CHECKSUM = 1246911279738;
+        var APP_BUILD_DATE = "Thu Jan 23 2020 20:20:50 GMT+0100 (Central European Standard Time)";
+        var CHECKSUM = 1319411761693;
     </script>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
@@ -124,7 +124,7 @@ multiFilterHelpHtml = `
         `;
 Ext.define('Utils.AncestorPiAppFilter', {
     alias: 'plugin.UtilsAncestorPiAppFilter',
-    version: "1.2.0",
+    version: "1.2.2",
     mixins: [
         'Ext.AbstractPlugin',
         'Rally.Messageable'
@@ -252,7 +252,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
          * @cfg {Array}
          * Field list for multi-level filter panel
          */
-        defaultFilterFields: ['Owner'],
+        defaultFilterFields: [],
 
         /**
          * @cfg {Boolean}
@@ -264,7 +264,12 @@ Ext.define('Utils.AncestorPiAppFilter', {
          * @cfg {Boolean}
          * Set to true to hide advanced filters on load
          */
-        advancedFilterCollapsed: false
+        advancedFilterCollapsed: false,
+        /**
+         * @cfg {String}
+         * Pass a typePath to set that PI type as the default visible tab
+         */
+        visibleTab: undefined,
     },
     filterControls: [],
     portfolioItemTypes: [],
@@ -273,6 +278,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
     isSubscriber: false,
     changeSubscribers: [],
     publishedValue: {},
+    defaultTab: 0,
 
     constructor: function () {
         this.callParent(arguments);
@@ -310,7 +316,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
         var appDefaults = this.cmp.defaultSettings;
         appDefaults['Utils.AncestorPiAppFilter.enableAncestorPiFilter2'] = false;
         appDefaults['Utils.AncestorPiAppFilter.projectScope'] = 'current';
-        appDefaults['Utils.AncestorPiAppFilter.enableMultiLevelPiFilter'] = false;
+        appDefaults['Utils.MultiLevelPiAppFilter.enableMultiLevelPiFilter'] = false;
         this.cmp.setDefaultSettings(appDefaults);
 
         Ext.override(Rally.ui.inlinefilter.InlineFilterPanel, {
@@ -329,7 +335,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
             success: function () {
                 Promise.all([this._addAncestorControls(), this._addFilters()]).then(
                     function () {
-                        this._setReady();
+                        setTimeout(function () { this._setReady(); }.bind(this), 500);
                     }.bind(this),
                     function (error) {
                         Rally.ui.notify.Notifier.showError({ message: error });
@@ -439,6 +445,11 @@ Ext.define('Utils.AncestorPiAppFilter', {
         let filters = [];
         let modelName = type.toLowerCase();
         let multiLevelFilters = this.getMultiLevelFilters();
+
+        if (!multiLevelFilters || !Object.keys(multiLevelFilters).length) {
+            return filters;
+        }
+
         let keys = this._getAllTypePaths();
         let currentLevelIndex = _.findIndex(keys, function (currentType) {
             return currentType.toLowerCase() === modelName;
@@ -822,7 +833,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
                         }
                     }
                 }
-                setTimeout(function () { this.tabPanel.setActiveTab(0); }.bind(this), 1500);
+                setTimeout(function () { this.tabPanel.setActiveTab(this.defaultTab); }.bind(this), 1500);
             }
             else {
                 this._clearAllFilters();
@@ -960,6 +971,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
         }
         else {
             this.subscriberEventName = Rally.getApp().getAppId() + this.$className;
+
             // Subscribe to a channel dedicated to this app
             this.subscribe(this, this.subscriberEventName, function (data) {
                 if (this.intervalTimer) {
@@ -970,9 +982,10 @@ Ext.define('Utils.AncestorPiAppFilter', {
                     this.isSubscriber = true;
                     this._hideControlCmp();
                 }
-                this.publishedValue = data;
 
-                if (this.ready) {
+                // We only want to refresh the app if we have all of the filters from the broadcaster
+                if (data.ready) {
+                    this.publishedValue = data;
                     // Default to an ancestor change event for backwards compatibility
                     if (data.changeType === 'ancestor' || !data.changeType) {
                         this._onSelect();
@@ -980,13 +993,27 @@ Ext.define('Utils.AncestorPiAppFilter', {
                     else {
                         this._onChange();
                     }
+                } else {
+                    setTimeout(() => { this.publish('registerChangeSubscriber', this.subscriberEventName); }, 500);
                 }
             }, this);
+
             // Attempt to register with a publisher (if one exists)
             this.publish('registerChangeSubscriber', this.subscriberEventName);
-            this.intervalTimer = setInterval(function () {
-                this.publish('registerChangeSubscriber', this.subscriberEventName);
-            }.bind(this), 500);
+            this.registerAttempts = 0;
+            this.intervalTimer = setInterval(() => {
+                this.registerAttempts++;
+
+                // After 15 attempts, there probably isn't a broadcaster present, so delete the interval
+                if (this.registerAttempts >= 15) {
+                    clearInterval(this.intervalTimer);
+                    delete this.intervalTimer;
+                    delete this.registerAttempts;
+                }
+                else {
+                    this.publish('registerChangeSubscriber', this.subscriberEventName);
+                }
+            }, 500);
             this.subscribe(this, 'reRegisterChangeSubscriber', function () {
                 this.publish('registerChangeSubscriber', this.subscriberEventName);
             }, this);
@@ -1017,19 +1044,18 @@ Ext.define('Utils.AncestorPiAppFilter', {
             result.filters = this.getMultiLevelFilters();
             result.filterStates = this.getMultiLevelFilterStates();
             result.wsapiFilters = this.getMultiLevelWsapiFilters();
+            result.ready = this.ready;
         }
         return result;
     },
 
     _setReady: function () {
-        this._updateReleaseValues();
-
         if (this._isSubscriber()) {
             if (this.tabPanel) {
                 this.tabPanel.hide();
             }
 
-            if (this._isSubscriber() && this.showFiltersBtn) {
+            if (this.showFiltersBtn) {
                 this.showFiltersBtn.hide();
             }
 
@@ -1041,9 +1067,12 @@ Ext.define('Utils.AncestorPiAppFilter', {
                 setTimeout(function () {
                     this.ready = true;
                     this.fireEvent('ready', this);
-                }.bind(this), 800);
+                }.bind(this), 3000);
                 return;
             }
+        }
+        else {
+            this._updateReleaseValues();
         }
         this.ready = true;
         this.fireEvent('ready', this);
@@ -1068,6 +1097,9 @@ Ext.define('Utils.AncestorPiAppFilter', {
         if (!currentSettings.hasOwnProperty('Utils.AncestorPiAppFilter.projectScope')) {
             currentSettings['Utils.AncestorPiAppFilter.projectScope'] = 'user';
         }
+        // if (!currentSettings.hasOwnProperty('Utils.MultiLevelPiAppFilter.enableMultiLevelPiFilter')) {
+        //     currentSettings['Utils.MultiLevelPiAppFilter.enableMultiLevelPiFilter'] = this.displayMultiLevelFilter;
+        // }
         var pluginSettingsFields = [{
             xtype: 'rallycheckboxfield',
             id: 'Utils.AncestorPiAppFilter.enableAncestorPiFilter2',
@@ -1675,7 +1707,29 @@ Ext.define('Utils.AncestorPiAppFilter', {
                                     advancedFilterRowsFlex = 2;
                                 }
 
+                                // If a default visible tab is specified, we need to convert an
+                                // artifact ordinal to a tab index
+                                // Tab indices start at 0 for top-most portfolio item
+                                // Artfiact ordinals start at -1 for user stories, 0 for Features, etc...
+                                let ordinalLookup = {};
+                                let modelLength = Object.keys(models).length;
+                                if (this.visibleTab) {
+                                    for (let i = 0; i < modelLength; i++) {
+                                        ordinalLookup[i] = modelLength - i - 1;
+                                    }
+                                }
+
                                 _.each(models, function (model, key) {
+                                    if (this.visibleTab && this.visibleTab.toLowerCase() === key.toLowerCase()) {
+                                        let ord = model.ordinal;
+                                        if (typeof ord === 'number') {
+                                            let newDefaultTab = ordinalLookup[ord + 1];
+                                            if (typeof newDefaultTab === 'number') {
+                                                this.defaultTab = newDefaultTab;
+                                            }
+                                        }
+                                    }
+
                                     promises.push(new Promise(function (newResolve) {
                                         let filterName = `inlineFilter${key}`;
                                         this.filterControls.push(Ext.create('Rally.ui.inlinefilter.InlineFilterControl', {
@@ -1745,7 +1799,7 @@ Ext.define('Utils.AncestorPiAppFilter', {
                                         });
 
                                         this.btnRenderArea.add(this.clearAllButton);
-                                        this.tabPanel.setActiveTab(0);
+                                        this.tabPanel.setActiveTab(this.defaultTab);
                                         if (this.filtersHidden) {
                                             this.tabPanel.hide();
                                         }
@@ -2396,7 +2450,7 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
     });
 })();
 
-(function() {
+(function () {
     var Ext = window.Ext4 || window.Ext;
 
     Ext.define('Rally.apps.board.Settings', {
@@ -2410,128 +2464,198 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             'Rally.data.wsapi.Filter'
         ],
 
-        getFields: function(config) {
+        getFields: function (config) {
             return [{
-                    name: 'type',
-                    xtype: 'rallycombobox',
-                    shouldRespondToScopeChange: true,
-                    context: config.context,
-                    storeConfig: {
-                        model: Ext.identityFn('TypeDefinition'),
-                        sorters: [{
-                            property: 'Name'
-                        }],
-                        fetch: ['DisplayName', 'ElementName', 'TypePath', 'Parent'],
-                        filters: [{
-                            property: 'Creatable',
-                            value: true
-                        }],
-                        autoLoad: false,
-                        remoteSort: false,
-                        remoteFilter: true
+                name: 'type',
+                xtype: 'rallycombobox',
+                shouldRespondToScopeChange: true,
+                context: config.context,
+                storeConfig: {
+                    model: Ext.identityFn('TypeDefinition'),
+                    sorters: [{
+                        property: 'Name'
+                    }],
+                    fetch: ['DisplayName', 'ElementName', 'TypePath', 'Parent'],
+                    filters: [{
+                        property: 'Creatable',
+                        value: true
+                    }],
+                    autoLoad: false,
+                    remoteSort: false,
+                    remoteFilter: true
+                },
+                displayField: 'DisplayName',
+                valueField: 'TypePath',
+                listeners: {
+                    select: function (combo, records) {
+                        combo.fireEvent('typeselected', records[0].get('TypePath'), combo.context);
                     },
-                    displayField: 'DisplayName',
-                    valueField: 'TypePath',
-                    listeners: {
-                        select: function(combo, records) {
-                            combo.fireEvent('typeselected', records[0].get('TypePath'), combo.context);
-                        },
-                        ready: function(combo) {
-                            combo.store.sort('DisplayName');
-                            combo.store.filterBy(function(record) {
-                                var parent = record.get('Parent'),
-                                    parentName = parent.ElementName;
-                                return _.contains(['Artifact', 'SchedulableArtifact', 'Requirement', 'PortfolioItem'], parentName);
-                            });
-                            combo.fireEvent('typeselected', combo.getRecord().get('TypePath'), combo.context);
-                        }
-                    },
-                    bubbleEvents: ['typeselected'],
-                    readyEvent: 'ready',
-                    handlesEvents: {
-                        projectscopechanged: function(context) {
-                            this.refreshWithNewContext(context);
-                        }
+                    ready: function (combo) {
+                        combo.store.sort('DisplayName');
+                        combo.store.filterBy(function (record) {
+                            var parent = record.get('Parent'),
+                                parentName = parent.ElementName;
+                            return _.contains(['Artifact', 'SchedulableArtifact', 'Requirement', 'PortfolioItem'], parentName);
+                        });
+                        combo.fireEvent('typeselected', combo.getRecord().get('TypePath'), combo.context);
                     }
                 },
-                {
-                    name: 'groupByField',
-                    fieldLabel: 'Columns',
-                    xtype: 'rallyfieldcombobox',
-                    readyEvent: 'ready',
-                    handlesEvents: {
-                        typeselected: function(type, context) {
-                            this.refreshWithNewModelType(type, context);
-                        }
-                    },
-                    listeners: {
-                        ready: function(combo) {
-                            combo.store.filterBy(function(record) {
-                                var field = record.get('fieldDefinition'),
-                                    attr = field.attributeDefinition;
-                                return attr && !attr.ReadOnly && !attr.Hidden && attr.Constrained && attr.AttributeType !== 'COLLECTION' &&
-                                    (!attr.AllowedValueType || attr.AllowedValueType._refObjectName !== 'User') &&
-                                    !_.contains(['Iteration', 'Release', 'Project'], attr.Name) &&
-                                    !field.isMappedFromArtifact;
-                            });
-                            var fields = Ext.Array.map(combo.store.getRange(), function(record) {
-                                return record.get(combo.getValueField());
-                            });
-                            if (!Ext.Array.contains(fields, combo.getValue())) {
-                                combo.setValue(fields[0]);
-                            }
-                        }
+                bubbleEvents: ['typeselected'],
+                readyEvent: 'ready',
+                handlesEvents: {
+                    projectscopechanged: function (context) {
+                        this.refreshWithNewContext(context);
                     }
-                },
-                {
-                    name: 'groupHorizontallyByField',
-                    xtype: 'rowsettingsfield',
-                    fieldLabel: 'Swimlanes',
-                    mapsToMultiplePreferenceKeys: ['showRows', 'rowsField'],
-                    readyEvent: 'ready',
-                    isAllowedFieldFn: function(field) {
-                        var attr = field.attributeDefinition;
-                        return (attr.Custom && (attr.Constrained || attr.AttributeType.toLowerCase() !== 'string') ||
-                                attr.Constrained || _.contains(['quantity', 'boolean'], attr.AttributeType.toLowerCase()) ||
-                                (!attr.Constrained && attr.AttributeType.toLowerCase() === 'object')) &&
-                            !_.contains(['web_link', 'text', 'date'], attr.AttributeType.toLowerCase()) &&
-                            !_.contains(['PortfolioItemType', 'LastResult'], attr.ElementName);
-                    },
-                    handlesEvents: {
-                        typeselected: function(type, context) {
-                            this.refreshWithNewModelType(type, context);
-                        }
-                    }
-                },
-                {
-                    name: 'order',
-                    fieldLabel: 'Order',
-                    xtype: 'rallyfieldcombobox',
-                    readyEvent: 'ready',
-                    handlesEvents: {
-                        typeselected: function(type, context) {
-                            this.refreshWithNewModelType(type, context);
-                        }
-                    },
-                    listeners: {
-                        ready: function(combo) {
-                            combo.store.filterBy(function(record) {
-                                var field = record.get('fieldDefinition'),
-                                    attr = field.attributeDefinition;
-                                return attr && attr.Sortable && !field.isMappedFromArtifact;
-                            });
-                        }
-                    },
-                    initialValue: config.context.getWorkspace().WorkspaceConfiguration.DragDropRankingEnabled ? 'DragAndDropRank' : 'Rank'
-                },
-                {
-                    type: 'query'
                 }
+            },
+            {
+                name: 'groupByField',
+                fieldLabel: 'Columns',
+                xtype: 'rallyfieldcombobox',
+                readyEvent: 'ready',
+                handlesEvents: {
+                    typeselected: function (type, context) {
+                        this.refreshWithNewModelType(type, context);
+                    }
+                },
+                listeners: {
+                    ready: function (combo) {
+                        combo.store.filterBy(function (record) {
+                            var field = record.get('fieldDefinition'),
+                                attr = field.attributeDefinition;
+                            return attr && !attr.ReadOnly && !attr.Hidden && attr.Constrained && attr.AttributeType !== 'COLLECTION' &&
+                                (!attr.AllowedValueType || attr.AllowedValueType._refObjectName !== 'User') &&
+                                !_.contains(['Iteration', 'Release'], attr.Name) &&
+                                !field.isMappedFromArtifact;
+                        });
+                        var fields = Ext.Array.map(combo.store.getRange(), function (record) {
+                            return record.get(combo.getValueField());
+                        });
+                        if (!Ext.Array.contains(fields, combo.getValue())) {
+                            combo.setValue(fields[0]);
+                        }
+                    }
+                }
+            },
+            {
+                name: 'groupHorizontallyByField',
+                xtype: 'rowsettingsfield',
+                fieldLabel: 'Swimlanes',
+                mapsToMultiplePreferenceKeys: ['showRows', 'rowsField'],
+                readyEvent: 'ready',
+                isAllowedFieldFn: function (field) {
+                    var attr = field.attributeDefinition;
+                    return (attr.Custom && (attr.Constrained || attr.AttributeType.toLowerCase() !== 'string') ||
+                        attr.Constrained || _.contains(['quantity', 'boolean'], attr.AttributeType.toLowerCase()) ||
+                        (!attr.Constrained && attr.AttributeType.toLowerCase() === 'object')) &&
+                        !_.contains(['web_link', 'text', 'date'], attr.AttributeType.toLowerCase()) &&
+                        !_.contains(['PortfolioItemType', 'LastResult'], attr.ElementName);
+                },
+                handlesEvents: {
+                    typeselected: function (type, context) {
+                        this.refreshWithNewModelType(type, context);
+                    }
+                }
+            },
+            {
+                name: 'order',
+                fieldLabel: 'Order',
+                xtype: 'rallyfieldcombobox',
+                readyEvent: 'ready',
+                handlesEvents: {
+                    typeselected: function (type, context) {
+                        this.refreshWithNewModelType(type, context);
+                    }
+                },
+                listeners: {
+                    ready: function (combo) {
+                        combo.store.filterBy(function (record) {
+                            var field = record.get('fieldDefinition'),
+                                attr = field.attributeDefinition;
+                            return attr && attr.Sortable && !field.isMappedFromArtifact;
+                        });
+                    }
+                },
+                initialValue: config.context.getWorkspace().WorkspaceConfiguration.DragDropRankingEnabled ? 'DragAndDropRank' : 'Rank'
+            },
+            {
+                type: 'query'
+            }
             ];
         }
     });
 })();
 
+Ext.override(Rally.ui.cardboard.CardBoard, {
+    _buildColumnsFromModel: function () {
+
+        var model = this.getModel();
+        if (model) {
+            var attribute = model.getField(this.attribute);
+            if (attribute) {
+                if (this.attribute === 'Project') {
+                    // Ext.create('Rally.data.wsapi.Store', {
+                    //     model: 'Project',
+                    //     context: Rally.getApp().getContext().getDataContext(),
+                    //     fetch: ['Name', 'Object', 'ObjectUUID', 'VersionId', 'IntegerValue', 'LocalizedStringValue', 'StringValue', 'ValueIndex', 'CreationDate', 'AttributeDefinition']
+                    // }).load({
+                    //     scope: this,
+                    //     callback: function (records, operation, success) {
+                    //         debugger;
+                    //     }
+                    // });
+                    Rally.getApp()._getCurrentProjectHierarchyForBoardColumns().then({
+                        scope: this,
+                        success: function (retrievedColumns) {
+                            this.fireEvent('columnsretrieved', this, retrievedColumns);
+
+                            this.columnDefinitions = [];
+                            this._toggleMask(true);
+                            _.each(retrievedColumns, this.addColumn, this);
+                            this.renderColumns();
+                        }
+                    });
+
+                }
+                else {
+                    attribute.getAllowedValueStore().load({
+                        requester: this,
+                        callback: function (records, operation, success) {
+                            var retrievedColumns = _.map(records, function (allowedValue) {
+                                var displayValue, value = allowedValue.get('StringValue');
+
+                                if (!value && attribute.attributeDefinition.AttributeType.toLowerCase() === 'rating') {
+                                    value = "None";
+                                } else if (attribute.attributeDefinition.AttributeType.toLowerCase() === 'object') {
+                                    displayValue = value;
+                                    value = allowedValue.get('_ref');
+                                    if (value === 'null') {
+                                        value = null;
+                                    }
+                                }
+
+                                return {
+                                    value: value,
+                                    columnHeaderConfig: {
+                                        headerTpl: displayValue || value || 'None'
+                                    }
+                                };
+                            });
+
+                            this.fireEvent('columnsretrieved', this, retrievedColumns);
+
+                            this.columnDefinitions = [];
+                            this._toggleMask(true);
+                            _.each(retrievedColumns, this.addColumn, this);
+                            this.renderColumns();
+                        },
+                        scope: this
+                    });
+                }
+            }
+        }
+    },
+});
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
@@ -2594,12 +2718,14 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
         launch: function () {
             Rally.data.wsapi.Proxy.superclass.timeout = 240000;
             Rally.data.wsapi.batch.Proxy.superclass.timeout = 240000;
-            var dataContext = this.getContext().getDataContext();
+            let dataContext = this.getContext().getDataContext();
+            let type = this.getSetting('type');
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
                 ptype: 'UtilsAncestorPiAppFilter',
                 pluginId: 'ancestorFilterPlugin',
                 settingsConfig: {},
                 filtersHidden: false,
+                visibleTab: type,
                 defaultFilterFields: ['ArtifactSearch', 'Owner'],
                 blackListFields: ['Successors', 'Predecessors', 'DisplayColor'],
                 whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA'],
@@ -2638,8 +2764,7 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             }
         },
 
-        _getGridBoardConfig: async function () {
-            this.loadingFailed = false;
+        _getGridBoardConfig: async function (status) {
             var context = this.getContext();
             var dataContext = context.getDataContext();
             if (this.searchAllProjects()) {
@@ -2648,8 +2773,8 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             var gridArea = this.down('#grid-area');
             gridArea.setLoading(true);
 
-            var filters = await this._getFilters();
-            if (this.loadingFailed) {
+            var filters = await this._getFilters(status);
+            if (status.loadingFailed) {
                 gridArea.setLoading(false);
                 return {};
             }
@@ -2774,6 +2899,81 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             return boardConfig;
         },
 
+        _getCurrentProjectHierarchyForBoardColumns: function () {
+            findNode = function (tree, projectID) {
+                let returnVal;
+                if (Array.isArray(tree)) {
+                    for (let node of tree) {
+                        if (node.oid === projectID) {
+                            return node;
+                        }
+                        if (node.children) {
+                            returnVal = findNode(node.children, projectID);
+                            if (returnVal) {
+                                return returnVal;
+                            }
+                        }
+                    }
+                }
+                else {
+                    if (tree && tree.oid === projectID) {
+                        return tree;
+                    }
+
+                    if (tree.children) {
+                        returnVal = findNode(tree.children, projectID);
+                        if (returnVal) {
+                            return returnVal;
+                        }
+                    }
+                }
+                return returnVal;
+            }
+
+            flattenNodes = function (node) {
+                let returnVal = [{
+                    value: `/project/${node.oid}`,
+                    columnHeaderConfig: {
+                        headerTpl: node.name || 'None'
+                    }
+                }];
+
+                if (node.children) {
+                    for (let child of node.children) {
+                        returnVal = returnVal.concat(flattenNodes(child));
+                    }
+                }
+
+                return returnVal;
+            }
+
+            let deferred = Ext.create('Deft.Deferred');
+            let context = this.getContext();
+            let workspaceID = context.getWorkspace().ObjectID;
+            let projectID = context.getProject().ObjectID;
+
+            Ext.Ajax.request({
+                url: `/slm/pjt/tree.sp?workspaceOid=${workspaceID}`,
+                success(response) {
+                    if (response && response.responseText) {
+                        let obj = Ext.JSON.decode(response.responseText);
+                        let node = findNode(obj, projectID);
+                        if (node) {
+                            let projects = flattenNodes(node);
+                            deferred.resolve(projects);
+                        }
+                        else {
+                            deferred.resolve([]);
+                        }
+                    } else {
+                        deferred.resolve([]);
+                    }
+                }
+            });
+
+            return deferred.promise;
+        },
+
         getSettingsFields: function () {
             var config = {
                 context: this.getContext(),
@@ -2788,13 +2988,23 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
         },
 
         _addBoard: async function () {
+            let thisStatus = { loadingFailed: false, cancelLoad: false };
+            this._cancelPreviousLoad(thisStatus);
+
             var gridArea = this.down('#grid-area');
             gridArea.removeAll();
-            let config = await this._getGridBoardConfig();
-            if (this.loadingFailed) {
+            let config = await this._getGridBoardConfig(thisStatus);
+            if (thisStatus.loadingFailed || thisStatus.cancelLoad) {
                 return;
             }
             gridArea.add(config);
+        },
+
+        _cancelPreviousLoad: function (newStatus) {
+            if (this.globalStatus) {
+                this.globalStatus.cancelLoad = true;
+            }
+            this.globalStatus = newStatus;
         },
 
         onTimeboxScopeChange: function (timeboxScope) {
@@ -2802,7 +3012,7 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             this._addBoard();
         },
 
-        _getFilters: async function () {
+        _getFilters: async function (status) {
             var queries = [],
                 timeboxScope = this.getContext().getTimeboxScope();
             if (this.getSetting('query')) {
@@ -2813,7 +3023,7 @@ Ext.define('Utils.AncestorPiSearchComboBox', {
             }
             let filters = await this.ancestorFilterPlugin.getAllFiltersForType(this.model.typePath, true).catch((e) => {
                 Rally.ui.notify.Notifier.showError({ message: (e.message || e) });
-                this.loadingFailed = true;
+                status.loadingFailed = true;
             });
 
             if (filters) {
