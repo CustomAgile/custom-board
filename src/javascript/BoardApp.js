@@ -122,7 +122,7 @@
             }
             var modelNames = [this.getSetting('type')],
                 blackListFields = ['Successors', 'Predecessors', 'DisplayColor'],
-                whiteListFields = ['Milestones', 'Tags'],
+                whiteListFields = ['Milestones', 'Tags', 'c_EnterpriseApprovalEA'],
                 config = {
                     xtype: 'rallygridboard',
                     stateful: false,
@@ -241,6 +241,9 @@
             return boardConfig;
         },
 
+        // Used when column type is set to "Project"
+        // Returns an array of column config objects representing all of the 
+        // projects in the current context
         _getCurrentProjectHierarchyForBoardColumns: function () {
             findNode = function (tree, projectID) {
                 let returnVal;
