@@ -69,8 +69,8 @@
                 filtersHidden: false,
                 visibleTab: type,
                 defaultFilterFields: ['ArtifactSearch', 'Owner'],
-                blackListFields: ['Successors', 'Predecessors', 'DisplayColor'],
-                whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic'],
+                blackListFields: ['Successors', 'Predecessors'],
+                whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
                 listeners: {
                     scope: this,
                     ready: function (plugin) {
@@ -121,8 +121,8 @@
                 return {};
             }
             var modelNames = [this.getSetting('type')],
-                blackListFields = ['Successors', 'Predecessors', 'DisplayColor'],
-                whiteListFields = ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic'],
+                blackListFields = ['Successors', 'Predecessors'],
+                whiteListFields = ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
                 config = {
                     xtype: 'rallygridboard',
                     stateful: false,
