@@ -65,12 +65,9 @@
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
                 ptype: 'UtilsAncestorPiAppFilter',
                 pluginId: 'ancestorFilterPlugin',
-                settingsConfig: {},
-                filtersHidden: false,
                 visibleTab: type,
                 defaultFilterFields: ['ArtifactSearch', 'Owner'],
                 blackListFields: ['Successors', 'Predecessors'],
-                whiteListFields: ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
                 listeners: {
                     scope: this,
                     ready: function (plugin) {
