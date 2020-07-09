@@ -99,7 +99,7 @@
             var gridArea = this.down('#grid-area');
             var gridboard = this.down('rallygridboard');
             if (gridArea && gridboard) {
-                gridboard.setHeight(gridArea.getHeight())
+                gridboard.setHeight(gridArea.getHeight() - 20)
             }
         },
 
@@ -198,6 +198,7 @@
                     rows: (this.getSetting('showRows') && this.getSetting('rowsField')) || ''
                 }
             });
+            this.onResize();
         },
 
         _getBoardConfig: function () {
@@ -223,12 +224,19 @@
                 },
             };
             if (this.getSetting('showRows')) {
-                Ext.merge(boardConfig, {
+                let field = this.getSetting('rowsField');
+                let config = {
                     rowConfig: {
-                        field: this.getSetting('rowsField'),
+                        field,
                         sortDirection: 'ASC'
                     }
-                });
+                };
+
+                if (field === 'Parent' || field === 'Feature' || field === 'WorkProduct') {
+                    config.rowConfig.sortField = 'DragAndDropRank';
+                }
+
+                Ext.merge(boardConfig, config);
             }
             if (this._shouldDisableRanking()) {
                 boardConfig.enableRanking = false;
