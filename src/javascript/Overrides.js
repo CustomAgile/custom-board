@@ -40,5 +40,63 @@ Ext.override(Rally.ui.cardboard.CardBoard, {
             this.getEl().setStyle('min-width', width + 'px');
             this.setWidth(width);
         }
+    },
+
+});
+
+Ext.override(Rally.ui.dialog.SharedViewDialog, {
+    /* 
+        Dialog and Combobox weren't refreshing after adding a new shared
+        view, so here we are 
+    */
+    _onCreate: function (dialog, record) {
+        if (this.grid) {
+            this.grid.getStore().reload();
+        }
+        let newPrefRef = record.get('_ref');
+        let combobox = Rally.getApp().down('#sharedViewCombo');
+
+        if (newPrefRef && combobox) {
+            combobox.getStore().reload();
+            combobox.setValue(newPrefRef);
+            combobox.saveState();
+        }
+
+        this.down('#doneButton').focus();
+    },
+});
+
+Ext.override(Rally.ui.gridboard.GridBoard, {
+    getCurrentView: function () {
+        let views = [];
+        let ancestorPlugin = Rally.getApp().ancestorFilterPlugin;
+
+        if (ancestorPlugin) {
+            views = Ext.apply(this.callParent(arguments), ancestorPlugin.getCurrentView());
+        }
+        else {
+            views = this.callParent(arguments);
+        }
+
+        return views;
+    },
+    setCurrentView: function (view) {
+        var app = Rally.getApp();
+        app.down('#grid-area').setLoading('Loading View...');
+        // Ext.suspendLayouts();        
+
+        if (app.ancestorFilterPlugin) {
+            if (view.filterStates) {
+                app.ancestorFilterPlugin.mergeLegacyFilter(view.filterStates, view, app.modelNames[0]);
+            }
+            app.ancestorFilterPlugin.setCurrentView(view);
+        }
+
+        this.callParent(arguments);
+
+        setTimeout(async function () {
+            // Ext.resumeLayouts(true);            
+            app._addBoard();
+        }.bind(this), 1200);
     }
 });

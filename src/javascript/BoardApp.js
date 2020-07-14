@@ -117,7 +117,7 @@
                 gridArea.setLoading(false);
                 return {};
             }
-            var modelNames = [this.getSetting('type')],
+            this.modelNames = [this.getSetting('type')],
                 blackListFields = ['Successors', 'Predecessors'],
                 whiteListFields = ['Milestones', 'Tags', 'c_EnterpriseApprovalEA', 'c_EAEpic', 'DisplayColor'],
                 config = {
@@ -138,14 +138,14 @@
                         ptype: 'rallygridboardinlinefiltercontrol',
                         inlineFilterButtonConfig: {
                             stateful: false,
-                            modelNames: modelNames,
+                            modelNames: this.modelNames,
                             filterChildren: true,
                             hidden: true,
                             inlineFilterPanelConfig: {
                                 hidden: true,
                                 quickFilterPanelConfig: {
                                     portfolioItemTypes: this.portfolioItemTypes,
-                                    modelName: modelNames[0],
+                                    modelName: this.modelNames[0],
                                     defaultFields: ['ArtifactSearch', 'Owner'],
                                     addQuickFilterConfig: {
                                         blackListFields: blackListFields,
@@ -167,12 +167,27 @@
                         ptype: 'rallygridboardfieldpicker',
                         headerPosition: 'left',
                         boardFieldBlackList: blackListFields,
-                        modelNames: modelNames,
-                        margin: '3 10 0 10'
+                        modelNames: this.modelNames,
+                        stateful: true,
+                        stateId: this.getModelScopedStateId(this.modelNames[0], 'fields'),
+                        margin: '3 10 0 10',
+                        fieldPickerConfig: {}
+                    },
+                    {
+                        ptype: 'rallygridboardsharedviewcontrol',
+                        sharedViewConfig: {
+                            //enableUrlSharing: this.getSetting('enableUrlSharing'),
+                            itemId: 'sharedViewCombo',
+                            stateful: true,
+                            stateId: this.getModelScopedStateId(this.modelNames[0], 'views'),
+                            stateEvents: ['select', 'change', 'beforedestroy'],
+                            context: this.getContext(),
+                            suppressViewNotFoundNotification: true
+                        },
                     }
                     ],
                     context: context,
-                    modelNames: modelNames,
+                    modelNames: this.modelNames,
                     storeConfig: {
                         filters: filters,
                         context: dataContext,
@@ -187,6 +202,10 @@
                 config.height = this.getHeight();
             }
             return config;
+        },
+
+        getModelScopedStateId(modelName, id) {
+            return this.getContext().getScopedStateId(`${modelName}-${id}`);
         },
 
         _onLoad: function () {
