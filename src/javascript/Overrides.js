@@ -83,6 +83,7 @@ Ext.override(Rally.ui.gridboard.GridBoard, {
     setCurrentView: function (view) {
         var app = Rally.getApp();
         app.down('#grid-area').setLoading('Loading View...');
+        app.settingView = true;
         // Ext.suspendLayouts();        
 
         if (app.ancestorFilterPlugin) {
@@ -92,10 +93,14 @@ Ext.override(Rally.ui.gridboard.GridBoard, {
             app.ancestorFilterPlugin.setCurrentView(view);
         }
 
-        this.callParent(arguments);
+        // Copying the relevant code from Parent as this.callParent(arguments) was giving error.
+        Ext.state.Manager.set(app.getModelScopedStateId(app.modelNames[0], 'fields'), view.fields);
+        Ext.state.Manager.set(this.stateId, _.pick(view, ['toggleState']));
+        //this.fireEvent('viewchange', this);
 
         setTimeout(async function () {
-            // Ext.resumeLayouts(true);            
+            // Ext.resumeLayouts(true);       
+            app.settingView = false;
             app._addBoard();
         }.bind(this), 1200);
     }

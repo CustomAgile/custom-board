@@ -60,6 +60,7 @@
         launch: function () {
             Rally.data.wsapi.Proxy.superclass.timeout = 240000;
             Rally.data.wsapi.batch.Proxy.superclass.timeout = 240000;
+            this.settingView = true;
             let dataContext = this.getContext().getDataContext();
             let type = this.getSetting('type');
             this.ancestorFilterPlugin = Ext.create('Utils.AncestorPiAppFilter', {
@@ -70,6 +71,7 @@
                 blackListFields: ['Successors', 'Predecessors'],
                 listeners: {
                     scope: this,
+                    change: this.viewChange,
                     ready: function (plugin) {
                         this.portfolioItemTypes = plugin.getPortfolioItemTypes();
                         Rally.data.ModelFactory.getModel({
@@ -171,7 +173,8 @@
                         stateful: true,
                         stateId: this.getModelScopedStateId(this.modelNames[0], 'fields'),
                         margin: '3 10 0 10',
-                        fieldPickerConfig: {}
+                        fieldPickerConfig: {},
+                        showInBoardMode: true
                     },
                     {
                         ptype: 'rallygridboardsharedviewcontrol',
@@ -195,6 +198,7 @@
                     },
                     listeners: {
                         load: this._onLoad,
+                        viewchange: this.viewChange,
                         scope: this
                     }
                 };
@@ -206,6 +210,23 @@
 
         getModelScopedStateId(modelName, id) {
             return this.getContext().getScopedStateId(`${modelName}-${id}`);
+        },
+
+        viewChange() {
+            if (this.settingView) {
+                return;
+            }
+            this._clearSharedViewCombo();
+            this._addBoard();
+        },
+
+        _clearSharedViewCombo: function () {
+            let combo = this.down('#sharedViewCombo');
+            if (!this.settingView && combo) {
+                combo.setValue('');
+                combo._clearParameters();
+                combo.saveState();
+            }
         },
 
         _onLoad: function () {
@@ -225,6 +246,8 @@
                 margin: '10px 0 0 0',
                 attribute: this.getSetting('groupByField'),
                 context: this.getContext(),
+                stateful: true,
+                fieldsStateId: this.getModelScopedStateId(this.modelNames[0], 'fields'),
                 cardConfig: {
                     editable: true,
                     showIconMenus: true
